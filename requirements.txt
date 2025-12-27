@@ -1,0 +1,12 @@
+torch
+numpy
+tqdm
+pyyaml
+datasets
+transformers
+accelerate
+evaluate
+sentencepiece
+tokenizers
+peft
+bitsandbytes

@@ -1,0 +1,18 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+.ipynb_checkpoints/
+
+# Data & artifacts (never commit)
+data/*
+!data/.gitkeep
+experiments/runs/
+outputs/
+checkpoints/
+wandb/
+mlruns/
+
+# OS/editor
+.DS_Store
+.vscode/
