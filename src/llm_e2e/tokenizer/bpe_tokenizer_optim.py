@@ -38,6 +38,7 @@ class BPEOptimTokenizer(Tokenizer):
         self.num_merges = num_merges
         self.heap = []
         self.bpe_merges = {}
+        self._encode_cache = {}
         self._build_vocab(special_tokens)
         if self.special_tokens:
             # escape special chars in tokens like <|endoftext|>
@@ -289,6 +290,10 @@ class BPEOptimTokenizer(Tokenizer):
                 encoded.append(self.special_tokens[item])
                 continue
 
+            if item in self._encode_cache:
+                encoded.extend(self._encode_cache[item])
+                continue
+
             byte_list = list(item)
 
             for merge_pair, token_id in self.bpe_merges.items():
@@ -305,6 +310,8 @@ class BPEOptimTokenizer(Tokenizer):
 
                 if len(byte_list) == 1:
                     break
+
+            self._encode_cache[item] = byte_list
 
             encoded.extend(byte_list)
 
