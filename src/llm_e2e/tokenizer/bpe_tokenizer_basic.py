@@ -1,13 +1,10 @@
 import regex
 import os
 import json
-import time
-from multiprocessing import Pool
-from functools import partial
 from collections import Counter
 from .tokenizer import Tokenizer
 
-class BPETokenizer(Tokenizer):
+class BPEBasicTokenizer(Tokenizer):
     """
     BPE tokenizer class that builds a vocabulary from the given text and encodes/decodes text into indices.
     """
@@ -18,7 +15,6 @@ class BPETokenizer(Tokenizer):
              remove_punctuation: bool = False,
              pattern: str = None,
              special_tokens: list[str] = None,
-             optimized: bool = False,
              num_merges: int = 100):
         """
         Args:
@@ -34,11 +30,18 @@ class BPETokenizer(Tokenizer):
 
         self.lowercase = lowercase
         self.remove_punctuation = remove_punctuation
-        self.optimized = optimized
         self.pattern = pattern or r"\s?\w+|[^\w\s]|\s"
+        self._compiled_pat = regex.compile(self.pattern)
         self.num_merges = num_merges
         self.bpe_merges = {}
         self._build_vocab(special_tokens)
+        if self.special_tokens:
+            # escape special chars in tokens like <|endoftext|>
+            sp_pat = "|".join(regex.escape(t) for t in self.special_tokens)
+            # regex.split with capture group keeps the delimiters
+            self._split_pat = regex.compile(f"({sp_pat})")
+        else:
+            self._split_pat = None
 
         if text:
             self.train(text, self.num_merges)
@@ -88,18 +91,12 @@ class BPETokenizer(Tokenizer):
         """
         if not self.special_tokens:
             return [text]
-        
-        # escape special chars in tokens like <|endoftext|>
-        pattern = "|".join(regex.escape(token) for token in self.special_tokens)
-        
-        # regex.split with capture group keeps the delimiters
-        parts = regex.split(f"({pattern})", text)
-        
-        return [p for p in parts if p]  # remove empty strings
+        parts = self._split_pat.split(text)
+        return [p for p in parts if p] # remove empty strings
 
     def pretokenize(self, text_parts:list[str]) -> list:
         """Split text on special tokens, then tokenize each chunk into byte lists."""
-        compiled_pat = regex.compile(self.pattern)
+        compiled_pat = self._compiled_pat
         pretokenized = []
         for text in text_parts:
             if text in self.special_tokens:
@@ -110,49 +107,6 @@ class BPETokenizer(Tokenizer):
                 for token in tokens:
                     pretokenized.append(tuple(token.encode("utf-8")))
         return pretokenized
-    
-    @staticmethod
-    def _pretokenize_chunk(chunk, pattern, special_tokens):
-        """Standalone function for multiprocessing."""
-        compiled_pat = regex.compile(pattern)
-        result = []
-        for part in chunk:
-            if part in special_tokens:
-                result.append(part)
-            else:
-                #tokens = regex.findall(pattern, part)
-                tokens = compiled_pat.findall(part)
-                for token in tokens:
-                    result.append(tuple(token.encode("utf-8")))
-        return result
-    
-    def pretokenize_optim(self, text_parts: list[str], num_workers: int = None) -> list:
-        if num_workers is None:
-            num_workers = os.cpu_count()
-            print("num_workers: ",num_workers)
-
-        # split text_parts into chunks for each worker
-        chunks = [[] for _ in range(num_workers)]
-        for i, part in enumerate(text_parts):
-            chunks[i % num_workers].append(part)
-
-        # remove empty chunks
-        chunks = [c for c in chunks if c]
-
-        if len(chunks) <= 1:
-            return self.pretokenize(text_parts)
-
-        func = partial(
-            BPETokenizer._pretokenize_chunk, #_pretokenize_chunk is a method on the class, so you need to reference it through the class name when using it with partial
-            pattern = self.pattern,
-            special_tokens = self.special_tokens
-        )
-
-        with Pool(num_workers) as pool:
-            results = pool.map(func, chunks)
-
-        # flatten results
-        return [token for result in results for token in result]
     
     def get_byte_word_frequencies(self, pretokenized:list) -> dict[tuple[bytes, ...], int]:
         """Count how often each byte-tuple pre-token appears in the corpus.
@@ -214,26 +168,14 @@ class BPETokenizer(Tokenizer):
 
         Stops early if no pairs remain (fully merged corpus).
         """
-        start = time.time()
         text = self.preprocess_text(text)
-        print(f"Preprocess: {time.time() - start:.2f}s")
 
-        start = time.time()
         parts = self.split_on_special_tokens(text)
-        print(f"Split on special tokens: {time.time() - start:.2f}s")
 
-        start = time.time()
-        if self.optimized:
-            pretokenized = self.pretokenize_optim(parts)
-        else:
-            pretokenized = self.pretokenize(parts)
-        print(f"Pretokenize: {time.time() - start:.2f}s")
+        pretokenized = self.pretokenize(parts)
 
-        start = time.time()
         byte_word_freq = self.get_byte_word_frequencies(pretokenized)
-        print(f"Byte word freq: {time.time() - start:.2f}s")
 
-        start = time.time()
         for _ in range(num_merges):
             byte_pair_freq = self.get_pair_frequencies(byte_word_freq)
 
@@ -253,8 +195,6 @@ class BPETokenizer(Tokenizer):
             self.vocab[self.vocab_size] = self.vocab[most_freq_pair[0]] + self.vocab[most_freq_pair[1]]
             self.bpe_merges[most_freq_pair] = self.vocab_size
             self.vocab_size += 1
-            
-        print(f"Merge loop: {time.time() - start:.2f}s")
 
         return self.vocab, list(self.bpe_merges.keys())
             
@@ -281,14 +221,19 @@ class BPETokenizer(Tokenizer):
             byte_list = list(item)
 
             for merge_pair, token_id in self.bpe_merges.items():
-
+                new_list = []
                 i = 0
-                while i < len(byte_list) - 1:
-                    if (byte_list[i], byte_list[i + 1]) == merge_pair:
-                        byte_list[i] = token_id
-                        del byte_list[i+1]
+                while i < len(byte_list):
+                    if i < len(byte_list) - 1 and (byte_list[i], byte_list[i + 1]) == merge_pair:
+                        new_list.append(token_id)
+                        i += 2
                     else:
+                        new_list.append(byte_list[i])
                         i += 1
+                byte_list = new_list
+
+                if len(byte_list) == 1:
+                    break
 
             encoded.extend(byte_list)
 
