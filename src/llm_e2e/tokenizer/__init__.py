@@ -4,3 +4,5 @@ from .character_tokenizer import CharacterTokenizer
 from .word_tokenizer import WordTokenizer
 from .bpe_tokenizer_basic import BPEBasicTokenizer
 from .bpe_tokenizer_optim import BPEOptimTokenizer
+from .wordpiece_tokenizer import WordPieceTokenizer
+from .unigram_tokenizer import UnigramTokenizer

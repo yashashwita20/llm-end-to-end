@@ -2,7 +2,7 @@ import heapq
 import regex
 import os
 import json
-from multiprocessing import Pool, heap
+from multiprocessing import Pool
 from functools import partial
 from collections import Counter
 from .tokenizer import Tokenizer
@@ -13,7 +13,7 @@ class BPEOptimTokenizer(Tokenizer):
     """
 
     def __init__(self,
-             text: str | os.PathLike = None,
+             text: str = None,
              lowercase: bool = False,
              remove_punctuation: bool = False,
              pattern: str = None,

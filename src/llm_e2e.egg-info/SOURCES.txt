@@ -25,11 +25,14 @@ src/llm_e2e/rag/qa.py
 src/llm_e2e/rag/retrieve.py
 src/llm_e2e/rag/safety_tests.py
 src/llm_e2e/tokenizer/__init__.py
-src/llm_e2e/tokenizer/bpe_tokenizer.py
+src/llm_e2e/tokenizer/bpe_tokenizer_basic.py
+src/llm_e2e/tokenizer/bpe_tokenizer_optim.py
 src/llm_e2e/tokenizer/byte_tokenizer.py
 src/llm_e2e/tokenizer/character_tokenizer.py
 src/llm_e2e/tokenizer/tokenizer.py
+src/llm_e2e/tokenizer/unigram_tokenizer.py
 src/llm_e2e/tokenizer/word_tokenizer.py
+src/llm_e2e/tokenizer/wordpiece_tokenizer.py
 src/llm_e2e/train/__init__.py
 src/llm_e2e/train/checkpoint.py
 src/llm_e2e/train/optim.py
